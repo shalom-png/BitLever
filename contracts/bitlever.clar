@@ -202,3 +202,61 @@
                 ;; Increment position counter
                 (var-set position-counter position-id)
                 (ok position-id)))))
+
+;; Close position
+(define-public (close-position (position-id uint))
+    (let ((position (unwrap! (map-get? positions position-id) ERR-INVALID-POSITION)))
+        ;; Verify owner
+        (asserts! (is-eq (get owner position) tx-sender) ERR-UNAUTHORIZED)
+        ;; Verify position is not liquidated
+        (asserts! (not (get is-liquidated position)) ERR-POSITION-LIQUIDATED)
+        
+        ;; Check if position should be liquidated before closing
+        (if (unwrap! (is-liquidatable position-id) ERR-INVALID-POSITION)
+            ;; If liquidatable, liquidate instead of normal close
+            (liquidate-position position-id)
+            ;; Regular position closing
+            (let ((pnl (calculate-pnl position)))
+                ;; Return collateral + PnL (if positive)
+                (try! (as-contract 
+                       (stx-transfer? 
+                        (+ (get collateral position) 
+                           (if (> pnl u0) pnl u0)) 
+                        tx-sender 
+                        tx-sender)))
+
+                ;; Delete position
+                (map-delete positions position-id)
+                (ok true)))))
+
+;; Liquidate position (can be called by anyone when conditions are met)
+(define-public (liquidate-position (position-id uint))
+    (let ((position (unwrap! (map-get? positions position-id) ERR-INVALID-POSITION)))
+        ;; Check if position is liquidatable
+        (asserts! (unwrap! (is-liquidatable position-id) ERR-INVALID-POSITION) ERR-INVALID-POSITION)
+        
+        ;; Mark as liquidated and update position
+        (map-set positions position-id
+            (merge position { is-liquidated: true }))
+        
+        ;; Transfer liquidation fee to caller (5% of collateral)
+        (let ((liquidation-fee (/ (* (get collateral position) u5) u100))
+              (remaining-collateral (- (get collateral position) liquidation-fee)))
+            
+            ;; Pay liquidation fee to caller
+            (try! (as-contract 
+                   (stx-transfer? 
+                    liquidation-fee 
+                    tx-sender 
+                    tx-sender)))
+            
+            ;; Return remaining collateral to position owner (if any)
+            (if (> remaining-collateral u0)
+                (try! (as-contract 
+                       (stx-transfer? 
+                        remaining-collateral 
+                        (get owner position) 
+                        tx-sender)))
+                (ok true))
+                
+            (ok true))))
