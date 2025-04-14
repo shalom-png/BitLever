@@ -323,3 +323,12 @@
 
 ;; Pause/unpause contract (future addition)
 (define-data-var contract-paused bool false)
+
+(define-public (set-contract-paused (paused bool))
+    (begin
+        (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
+        (var-set contract-paused paused)
+        (ok true)))
+
+(define-read-only (is-contract-paused)
+    (ok (var-get contract-paused)))
