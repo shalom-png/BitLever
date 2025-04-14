@@ -141,3 +141,64 @@
             (ok (map-set balances 
                 tx-sender 
                 { stx-balance: (+ current-balance amount) })))))
+
+;; Withdraw collateral
+(define-public (withdraw-collateral (amount uint))
+    (begin
+        ;; Validate amount
+        (asserts! (> amount u0) ERR-ZERO-AMOUNT)
+        
+        (let ((current-balance (get stx-balance (get-balance tx-sender))))
+            (asserts! (>= current-balance amount) ERR-INSUFFICIENT-BALANCE)
+            (try! (as-contract (stx-transfer? amount tx-sender tx-sender)))
+            (ok (map-set balances 
+                tx-sender 
+                { stx-balance: (- current-balance amount) })))))
+
+;; Open position
+(define-public (open-position 
+    (position-type uint)
+    (size uint)
+    (leverage uint))
+    (begin
+        ;; Validate inputs
+        (asserts! (> size u0) ERR-INVALID-AMOUNT)
+        (asserts! (and (> leverage u0) (<= leverage MAX-LEVERAGE)) ERR-MAX-LEVERAGE-EXCEEDED)
+        (asserts! (or (is-eq position-type TYPE-LONG) 
+                     (is-eq position-type TYPE-SHORT)) ERR-INVALID-POSITION)
+        (asserts! (> (var-get current-price) u0) ERR-INVALID-PRICE)
+        
+        (let 
+            ((required-collateral (/ (* size (var-get current-price)) leverage))
+             (current-balance (get stx-balance (get-balance tx-sender)))
+             (position-id (+ (var-get position-counter) u1))
+             (entry-price (var-get current-price)))
+
+            ;; Check sufficient collateral
+            (asserts! (>= current-balance required-collateral) ERR-INSUFFICIENT-COLLATERAL)
+
+            ;; Calculate liquidation price
+            (let ((liquidation-price (unwrap! (calculate-liquidation-price 
+                                             entry-price 
+                                             position-type 
+                                             leverage) ERR-INVALID-POSITION)))
+
+                ;; Create position
+                (map-set positions position-id
+                    { owner: tx-sender,
+                      position-type: position-type,
+                      size: size,
+                      entry-price: entry-price,
+                      leverage: leverage,
+                      collateral: required-collateral,
+                      liquidation-price: liquidation-price,
+                      is-liquidated: false })
+
+                ;; Update balance
+                (map-set balances 
+                    tx-sender 
+                    { stx-balance: (- current-balance required-collateral) })
+
+                ;; Increment position counter
+                (var-set position-counter position-id)
+                (ok position-id)))))
