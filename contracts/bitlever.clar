@@ -54,7 +54,8 @@
 ;; Track user balances
 (define-map balances 
     principal 
-    { stx-balance: uint })
+    { stx-balance: uint }
+)
 
 ;; Track positions
 (define-map positions 
@@ -66,7 +67,8 @@
       leverage: uint,
       collateral: uint,
       liquidation-price: uint,
-      is-liquidated: bool })
+      is-liquidated: bool }
+)
 
 ;; Position counter
 (define-data-var position-counter uint u0)
@@ -82,19 +84,25 @@
 (define-read-only (get-balance (user principal))
     (default-to 
         { stx-balance: u0 }
-        (map-get? balances user)))
+        (map-get? balances user)
+	)
+)
 
 (define-read-only (get-position (position-id uint))
-    (map-get? positions position-id))
+    (map-get? positions position-id)
+)
 
 (define-read-only (get-current-price)
-    (ok (var-get current-price)))
+    (ok (var-get current-price))
+)
 
 (define-read-only (get-contract-owner)
-    (ok (var-get contract-owner)))
+    (ok (var-get contract-owner))
+)
 
 (define-read-only (get-position-count)
-    (ok (var-get position-counter)))
+    (ok (var-get position-counter))
+)
 
 ;; Calculate liquidation price
 (define-read-only (calculate-liquidation-price 
@@ -114,7 +122,10 @@
             ;; Long position liquidation price
             (ok (/ (* entry-price (- u100 (/ u100 leverage))) u100))
             ;; Short position liquidation price
-            (ok (/ (* entry-price (+ u100 (/ u100 leverage))) u100)))))
+            (ok (/ (* entry-price (+ u100 (/ u100 leverage))) u100))
+		)
+	)
+)
 
 ;; Check if position is liquidatable
 (define-read-only (is-liquidatable (position-id uint))
@@ -126,7 +137,10 @@
                 ;; Long position liquidation check
                 (ok (<= current-market-price (get liquidation-price position)))
                 ;; Short position liquidation check
-                (ok (>= current-market-price (get liquidation-price position)))))))
+                (ok (>= current-market-price (get liquidation-price position))))
+		)
+	)
+)
 
 ;; Public Functions
 
@@ -140,7 +154,10 @@
             (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
             (ok (map-set balances 
                 tx-sender 
-                { stx-balance: (+ current-balance amount) })))))
+                { stx-balance: (+ current-balance amount) }))
+		)
+	)
+)
 
 ;; Withdraw collateral
 (define-public (withdraw-collateral (amount uint))
@@ -153,7 +170,10 @@
             (try! (as-contract (stx-transfer? amount tx-sender tx-sender)))
             (ok (map-set balances 
                 tx-sender 
-                { stx-balance: (- current-balance amount) })))))
+                { stx-balance: (- current-balance amount) }))
+		)
+	)
+)
 
 ;; Open position
 (define-public (open-position 
@@ -201,7 +221,10 @@
 
                 ;; Increment position counter
                 (var-set position-counter position-id)
-                (ok position-id)))))
+                (ok position-id))
+		)
+	)
+)
 
 ;; Close position
 (define-public (close-position (position-id uint))
@@ -227,7 +250,10 @@
 
                 ;; Delete position
                 (map-delete positions position-id)
-                (ok true)))))
+                (ok true))
+		)
+	)
+)
 
 ;; Liquidate position (can be called by anyone when conditions are met)
 (define-public (liquidate-position (position-id uint))
@@ -251,15 +277,18 @@
                     tx-sender)))
             
             ;; Return remaining collateral to position owner (if any)
-            (if (> remaining-collateral u0)
-                (try! (as-contract 
-                       (stx-transfer? 
-                        remaining-collateral 
-                        (get owner position) 
-                        tx-sender)))
-                (ok true))
+			(if (> remaining-collateral u0)
+    			(try! (as-contract 
+           			(stx-transfer? 
+            		remaining-collateral 
+            	(get owner position) 
+            	tx-sender)))
+    		true)
                 
-            (ok true))))
+            (ok true)
+		)
+	)
+)
 
 ;; Private Functions
 
@@ -295,7 +324,10 @@
                     (if (> (* price-diff (get size position)) (get collateral position))
                         ;; Cap loss at collateral amount
                         (- u0 (get collateral position))
-                        (- u0 (* price-diff (get size position)))))))))
+                        (- u0 (* price-diff (get size position))))))
+		)
+	)
+)
 
 ;; Admin Functions
 
@@ -308,7 +340,9 @@
         (asserts! (> new-price u0) ERR-INVALID-PRICE)
         ;; Update price
         (var-set current-price new-price)
-        (ok true)))
+        (ok true)
+	)
+)
 
 ;; Update contract owner
 (define-public (set-contract-owner (new-owner principal))
@@ -319,7 +353,9 @@
         (asserts! (not (is-eq new-owner tx-sender)) ERR-UNAUTHORIZED)
         ;; Update contract owner
         (var-set contract-owner new-owner)
-        (ok true)))
+        (ok true)
+	)
+)
 
 ;; Pause/unpause contract (future addition)
 (define-data-var contract-paused bool false)
@@ -328,7 +364,10 @@
     (begin
         (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-UNAUTHORIZED)
         (var-set contract-paused paused)
-        (ok true)))
+        (ok true)
+	)
+)
 
 (define-read-only (is-contract-paused)
-    (ok (var-get contract-paused)))
+    (ok (var-get contract-paused))
+)
